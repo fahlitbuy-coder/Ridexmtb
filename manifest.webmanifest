@@ -1,0 +1,9 @@
+{
+  "name": "RIDEX MTB",
+  "short_name": "RIDEX",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0e0b",
+  "theme_color": "#0b0e0b",
+  "description": "Mapa y grabador de rutas MTB"
+}

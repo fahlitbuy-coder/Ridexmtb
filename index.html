@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0e0b">
+<link rel="manifest" href="manifest.webmanifest">
+<title>RIDEX MTB</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#0b0e0b;--panel:#151b14;--green:#b8ff36;--muted:#a4ae9c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f5f7f2;font:15px system-ui,-apple-system,sans-serif}
+header{padding:17px 18px 12px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:27px;font-weight:950;letter-spacing:1px;color:var(--green)}.sub{font-size:10px;color:var(--muted);letter-spacing:2px}
+main{padding:0 12px 95px}.panel{background:var(--panel);border:1px solid #273124;border-radius:16px;padding:13px;margin:10px 0}
+h2{font-size:17px;margin:0 0 10px}#map{height:55vh;min-height:340px;border-radius:15px;border:1px solid #35412d;z-index:1}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button,.filebtn{background:#26351e;color:var(--green);border:1px solid #40532f;padding:11px 13px;border-radius:12px;font-weight:700;font-size:13px}
+button.primary{background:var(--green);color:#10150c;border:0}button:disabled{opacity:.45}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#0e130d;padding:10px;border-radius:12px}.stat b{display:block;font-size:19px;color:var(--green)}.stat small{color:var(--muted)}
+.filters{display:flex;gap:7px;flex-wrap:wrap}.filter{padding:7px 10px;border-radius:20px;font-size:12px}.green{border-color:#43cf73;color:#43cf73}.blue{border-color:#42a5f5;color:#42a5f5}.red{border-color:#f15b50;color:#f15b50}.black{border-color:#aaa;color:#ddd}
+.note{font-size:12px;color:var(--muted);line-height:1.45}.status{color:var(--green);font-size:12px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#101510;border-top:1px solid #293326;display:flex;justify-content:space-around;padding:10px 4px calc(10px + env(safe-area-inset-bottom));z-index:1000}
+nav button{background:transparent;border:0;color:#aeb8a5;padding:8px;font-size:12px}nav button.active{color:var(--green)}
+input[type=file]{display:none}.leaflet-container{background:#18221a}
+</style>
+</head>
+<body>
+<header><div><div class="logo">RIDEX</div><div class="sub">RIDE YOUR LIMITS · MTB</div></div><div class="status">BETA 1.0</div></header>
+<main>
+<section id="mapPage">
+ <div class="panel"><h2>Mapa MTB · Casas Bajas</h2><div class="note">Mapa propio de RIDEX con caminos base y tus recorridos. Los senderos específicos de Trailforks aún deben importarse mediante GPX autorizado.</div></div>
+ <div id="map"></div>
+ <div class="panel">
+  <div class="filters">
+   <button class="filter green" data-diff="easy">🟢 Fácil</button><button class="filter blue" data-diff="medium">🔵 Media</button><button class="filter red" data-diff="hard">🔴 Difícil</button><button class="filter black" data-diff="expert">⚫ Extrema</button>
+  </div>
+  <div class="controls"><button class="primary" id="locate">◎ Mi ubicación</button><button id="start">▶ Grabar ruta</button><button id="stop" disabled>■ Detener</button></div>
+ </div>
+ <div class="panel"><h2>Actividad</h2><div class="stats"><div class="stat"><b id="distance">0.00 km</b><small>Distancia</small></div><div class="stat"><b id="duration">00:00</b><small>Tiempo</small></div><div class="stat"><b id="points">0</b><small>Puntos GPS</small></div></div><div class="controls"><button id="save">Guardar GPX</button><label class="filebtn" for="gpx">Importar GPX</label><input id="gpx" type="file" accept=".gpx,application/gpx+xml"></div><p class="note" id="gpsStatus">El GPS solo se activa cuando pulsas «Mi ubicación» o «Grabar ruta». Necesita permiso y conexión segura (HTTPS).</p></div>
+</section>
+<section id="garagePage" hidden><div class="panel"><h2>Mi bicicleta</h2><label>Modelo<br><input id="bike" value="Mi MTB" style="margin-top:6px;width:100%;padding:12px;background:#0e130d;color:white;border:1px solid #40532f;border-radius:10px"></label><p class="note">Guarda el nombre de tu bici en este dispositivo.</p><button id="saveBike">Guardar bicicleta</button></div></section>
+<section id="profilePage" hidden><div class="panel"><h2>Perfil RIDEX</h2><p>Rider MTB</p><p class="note">Tus grabaciones y datos se guardan localmente en este dispositivo. Esta versión no tiene cuentas ni comparte tu ubicación.</p></div></section>
+</main>
+<nav><button class="active" data-page="mapPage">🗺️<br>Mapa</button><button data-page="garagePage">🚵<br>Garaje</button><button data-page="profilePage">👤<br>Perfil</button></nav>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const casas=[-1.2665,40.1835]; // aproximación al centro de Casas Bajas; ajustar con GPS
+const map=L.map('map').setView([casas[1],casas[0]],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+let track=[],line=null,watch=null,startAt=null,timer=null,marker=null,meters=0;
+const $=id=>document.getElementById(id);
+function hav(a,b){const R=6371000,p=Math.PI/180,d1=(b.lat-a.lat)*p,d2=(b.lng-a.lng)*p;let x=Math.sin(d1/2)**2+Math.cos(a.lat*p)*Math.cos(b.lat*p)*Math.sin(d2/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function update(){ $('distance').textContent=(meters/1000).toFixed(2)+' km';$('points').textContent=track.length;if(startAt){let s=Math.floor((Date.now()-startAt)/1000);$('duration').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}}
+function addPosition(pos){let p={lat:pos.coords.latitude,lng:pos.coords.longitude};if(track.length)meters+=hav(track[track.length-1],p);track.push(p);if(!line)line=L.polyline(track,{color:'#b8ff36',weight:5}).addTo(map);else line.setLatLngs(track);if(!marker)marker=L.circleMarker(p,{radius:7,color:'#10150c',fillColor:'#b8ff36',fillOpacity:1}).addTo(map);else marker.setLatLng(p);map.panTo(p);update()}
+function errorGPS(e){$('gpsStatus').textContent='No se pudo obtener GPS: '+e.message+'. Comprueba permisos y HTTPS.'}
+$('locate').onclick=()=>{if(!navigator.geolocation){$('gpsStatus').textContent='Este navegador no ofrece geolocalización.';return} $('gpsStatus').textContent='Buscando ubicación…';navigator.geolocation.getCurrentPosition(p=>{let ll=[p.coords.latitude,p.coords.longitude];map.setView(ll,16);if(marker)marker.setLatLng(ll);else marker=L.circleMarker(ll,{radius:8,color:'#10150c',fillColor:'#b8ff36',fillOpacity:1}).addTo(map);$('gpsStatus').textContent='Ubicación encontrada.'},errorGPS,{enableHighAccuracy:true,timeout:15000})};
+$('start').onclick=()=>{if(!navigator.geolocation){errorGPS({message:'GPS no disponible'});return}track=[];meters=0;startAt=Date.now();if(line){map.removeLayer(line);line=null}if(watch!==null)navigator.geolocation.clearWatch(watch);watch=navigator.geolocation.watchPosition(addPosition,errorGPS,{enableHighAccuracy:true,maximumAge:1000,timeout:15000});$('start').disabled=true;$('stop').disabled=false;$('gpsStatus').textContent='Grabando ruta. Mantén RIDEX abierto para registrar el recorrido.';timer=setInterval(update,1000)};
+$('stop').onclick=()=>{if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;clearInterval(timer);$('start').disabled=false;$('stop').disabled=true;$('gpsStatus').textContent='Grabación detenida. Puedes guardar el GPX.';update()};
+$('save').onclick=()=>{if(track.length<2){$('gpsStatus').textContent='Graba una ruta con al menos dos puntos antes de guardarla.';return}let xml='<?xml version="1.0"?><gpx version="1.1" creator="RIDEX MTB" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Ruta RIDEX</name><trkseg>'+track.map(p=>`<trkpt lat="${p.lat}" lon="${p.lng}"></trkpt>`).join('')+'</trkseg></trk></gpx>';let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([xml],{type:'application/gpx+xml'}));a.download='ridex-ruta.gpx';a.click();URL.revokeObjectURL(a.href)};
+$('gpx').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let doc=new DOMParser().parseFromString(r.result,'text/xml');let pts=[...doc.getElementsByTagName('trkpt')].map(n=>({lat:+n.getAttribute('lat'),lng:+n.getAttribute('lon')}));if(!pts.length){$('gpsStatus').textContent='El archivo GPX no contiene puntos de ruta.';return}if(line)map.removeLayer(line);track=pts;meters=0;for(let i=1;i<pts.length;i++)meters+=hav(pts[i-1],pts[i]);line=L.polyline(track,{color:'#b8ff36',weight:5}).addTo(map);map.fitBounds(line.getBounds());update();$('gpsStatus').textContent='GPX importado correctamente.'};r.readAsText(f)};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');['mapPage','garagePage','profilePage'].forEach(id=>$(id).hidden=id!==b.dataset.page);if(b.dataset.page==='mapPage')setTimeout(()=>map.invalidateSize(),100)});
+$('saveBike').onclick=()=>{localStorage.setItem('ridexBike',$('bike').value);alert('Bicicleta guardada')};$('bike').value=localStorage.getItem('ridexBike')||'Mi MTB';
+document.querySelectorAll('[data-diff]').forEach(b=>b.onclick=()=>{$('gpsStatus').textContent='Filtro seleccionado: '+b.textContent+'. Importa GPX de sendas para ver sus trazados.'});
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+</script>
+</body></html>
